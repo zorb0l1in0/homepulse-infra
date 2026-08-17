@@ -165,3 +165,11 @@ resource "aws_instance" "homepulse" {
     Name = "homepulse-${var.environment}-server"
   }
 }
+
+# --- Generate Ansible inventory ---
+resource "local_file" "ansible_inventory" {
+  content = templatefile("${path.module}/ansible/inventory.tpl", {
+    server_ip = aws_instance.homepulse.public_ip
+  })
+  filename = "${path.module}/ansible/inventories/hosts.ini"
+}
