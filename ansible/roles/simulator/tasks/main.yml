@@ -1,0 +1,30 @@
+---
+- name: Create simulator directory
+  ansible.builtin.file:
+    path: /opt/homepulse/simulator
+    state: directory
+    mode: "0755"
+
+- name: Copy simulator files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /opt/homepulse/simulator/
+    mode: "0644"
+  loop:
+    - ../../../simulator/simulator.py
+    - ../../../simulator/requirements.txt
+    - ../../../simulator/Dockerfile
+
+- name: Deploy simulator docker-compose
+  ansible.builtin.template:
+    src: docker-compose.simulator.yml.j2
+    dest: /opt/homepulse/docker-compose.simulator.yml
+    mode: "0644"
+
+- name: Build and start simulator
+  community.docker.docker_compose_v2:
+    project_src: /opt/homepulse
+    files:
+      - docker-compose.simulator.yml
+    build: always
+    state: present

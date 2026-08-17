@@ -123,8 +123,8 @@ terraform destroy -var="my_ip=$(curl -s ifconfig.me)/32"
 - [x] Phase 1 — Terraform setup + VPC
 - [x] Phase 2 — Networking (subnet, IGW, route table, security group)
 - [x] Phase 3 — EC2 instance with SSH key pair
-- [ ] Phase 4 — Ansible roles (common, docker, mosquitto, monitoring)
-- [ ] Phase 5 — Sensor simulator (Python → MQTT)
+- [X] Phase 4 — Ansible roles (common, docker, mosquitto, monitoring)
+- [X] Phase 5 — Sensor simulator (Python → MQTT)
 - [ ] Phase 6 — Grafana dashboards + Telegram alerting
 - [ ] Phase 7 — ALB + HTTPS (ACM certificate)
 - [ ] Phase 8 — GitHub Actions CI/CD (plan → approve → apply → configure)
