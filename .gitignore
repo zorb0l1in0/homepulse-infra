@@ -1,0 +1,11 @@
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.terraform.lock.hcl
+*.tfvars
+!example.tfvars
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
