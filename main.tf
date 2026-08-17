@@ -1,6 +1,7 @@
 # HomePulse — Remote Property Monitoring Platform
-# Phase 1: VPC foundation
+# Phase 1: VPC
 # Phase 2: Networking (subnet, IGW, route table, security group)
+# Phase 3: EC2 instance with SSH key
 
 terraform {
   required_version = ">= 1.5.0"
@@ -9,6 +10,10 @@ terraform {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
     }
   }
 }
@@ -111,5 +116,52 @@ resource "aws_security_group" "homepulse" {
 
   tags = {
     Name = "homepulse-${var.environment}-sg"
+  }
+}
+
+resource "tls_private_key" "ssh" {
+  algorithm = "ED25519"
+}
+
+resource "aws_key_pair" "homepulse" {
+  key_name   = "homepulse-${var.environment}-key"
+  public_key = tls_private_key.ssh.public_key_openssh
+}
+
+resource "local_file" "ssh_private_key" {
+  content         = tls_private_key.ssh.private_key_openssh
+  filename        = "${path.module}/homepulse-key.pem"
+  file_permission = "0400"
+}
+
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"]
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "aws_instance" "homepulse" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.homepulse.id]
+  key_name               = aws_key_pair.homepulse.key_name
+
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
+
+  tags = {
+    Name = "homepulse-${var.environment}-server"
   }
 }
