@@ -1,0 +1,11 @@
+services:
+  simulator:
+    build: ./simulator
+    container_name: homepulse-simulator
+    restart: unless-stopped
+    command: ["--host", "mosquitto", "--interval", "10"]
+
+networks:
+  default:
+    name: homepulse-net
+    external: true
