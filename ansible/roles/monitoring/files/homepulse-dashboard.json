@@ -1,0 +1,235 @@
+{
+  "title": "HomePulse Sensors",
+  "uid": "homepulse-sensors",
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "property",
+        "type": "custom",
+        "current": {
+          "text": "torino",
+          "value": "torino"
+        },
+        "options": [
+          {
+            "text": "torino",
+            "value": "torino",
+            "selected": true
+          },
+          {
+            "text": "tenerife",
+            "value": "tenerife",
+            "selected": false
+          }
+        ],
+        "query": "torino,tenerife"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Temperature by Room",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "import \"strings\"\n\nfrom(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r._field == \"temperature\")\n  |> filter(fn: (r) => r.topic =~ /homepulse\\/${property}/)\n  |> map(fn: (r) => ({r with _measurement: strings.split(v: r.topic, t: \"/\")[2]}))\n  |> keep(columns: [\"_time\", \"_value\", \"_measurement\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Humidity by Room",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "import \"strings\"\n\nfrom(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.topic =~ /homepulse\\/${property}/)\n  |> map(fn: (r) => ({r with _measurement: strings.split(v: r.topic, t: \"/\")[2]}))\n  |> keep(columns: [\"_time\", \"_value\", \"_measurement\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "humidity",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Current Temperature",
+      "type": "gauge",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "import \"strings\"\n\nfrom(bucket: \"sensors\")\n  |> range(start: -1m)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r._field == \"temperature\")\n  |> filter(fn: (r) => r.topic =~ /homepulse\\/${property}/)\n  |> last()\n  |> map(fn: (r) => ({r with _measurement: strings.split(v: r.topic, t: \"/\")[2]}))\n  |> keep(columns: [\"_value\", \"_measurement\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "min": -5,
+          "max": 45,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 15
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 35
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Current Humidity",
+      "type": "gauge",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "import \"strings\"\n\nfrom(bucket: \"sensors\")\n  |> range(start: -1m)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.topic =~ /homepulse\\/${property}/)\n  |> last()\n  |> map(fn: (r) => ({r with _measurement: strings.split(v: r.topic, t: \"/\")[2]}))\n  |> keep(columns: [\"_value\", \"_measurement\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "humidity",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 30
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Door / Window Status",
+      "type": "state-timeline",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "query": "import \"strings\"\n\nfrom(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r._field == \"door_open\" or r._field == \"window_open\")\n  |> filter(fn: (r) => r.topic =~ /homepulse\\/${property}/)\n  |> map(fn: (r) => ({r with _measurement: strings.split(v: r.topic, t: \"/\")[2] + \" - \" + r._field}))\n  |> keep(columns: [\"_time\", \"_value\", \"_measurement\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "true": {
+                  "text": "OPEN",
+                  "color": "red"
+                },
+                "false": {
+                  "text": "CLOSED",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

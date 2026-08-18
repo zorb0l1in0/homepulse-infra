@@ -8,8 +8,10 @@
     - /opt/homepulse/telegraf
     - /opt/homepulse/influxdb/data
     - /opt/homepulse/grafana/data
+    - /opt/homepulse/grafana/dashboards
     - /opt/homepulse/grafana/provisioning/datasources
     - /opt/homepulse/grafana/provisioning/dashboards
+    - /opt/homepulse/grafana/provisioning/alerting
 
 - name: Set Grafana data ownership
   ansible.builtin.file:
@@ -30,6 +32,24 @@
     dest: /opt/homepulse/grafana/provisioning/datasources/influxdb.yml
     mode: "0644"
 
+- name: Deploy Grafana dashboard provider
+  ansible.builtin.template:
+    src: grafana-dashboard-provider.yml.j2
+    dest: /opt/homepulse/grafana/provisioning/dashboards/homepulse.yml
+    mode: "0644"
+
+- name: Deploy Grafana dashboard JSON
+  ansible.builtin.copy:
+    src: homepulse-dashboard.json
+    dest: /opt/homepulse/grafana/dashboards/homepulse-dashboard.json
+    mode: "0644"
+
+- name: Deploy Grafana alerting provisioning
+  ansible.builtin.template:
+    src: grafana-alerting.yml.j2
+    dest: /opt/homepulse/grafana/provisioning/alerting/telegram.yml
+    mode: "0644"
+
 - name: Deploy monitoring docker-compose
   ansible.builtin.template:
     src: docker-compose.monitoring.yml.j2
@@ -42,3 +62,4 @@
     files:
       - docker-compose.monitoring.yml
     state: present
+    recreate: always
