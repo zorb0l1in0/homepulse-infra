@@ -1,0 +1,12 @@
+---
+- name: Configure HomePulse server
+  hosts: homepulse
+  become: true
+  vars_files:
+    - group_vars/vault.yml
+
+  roles:
+    - common
+    - docker
+    - mosquitto
+    - monitoring

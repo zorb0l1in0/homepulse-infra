@@ -1,0 +1,6 @@
+---
+timezone: "Europe/Madrid"
+influxdb_admin_user: "admin"
+influxdb_org: "homepulse"
+influxdb_bucket: "sensors"
+grafana_admin_user: "admin"

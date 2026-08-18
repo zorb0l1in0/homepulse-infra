@@ -1,0 +1,33 @@
+---
+- name: Create Mosquitto directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "1883"
+    group: "1883"
+    mode: "0755"
+  loop:
+    - /opt/homepulse/mosquitto/config
+    - /opt/homepulse/mosquitto/data
+    - /opt/homepulse/mosquitto/log
+
+- name: Deploy Mosquitto config
+  ansible.builtin.template:
+    src: mosquitto.conf.j2
+    dest: /opt/homepulse/mosquitto/config/mosquitto.conf
+    owner: "1883"
+    group: "1883"
+    mode: "0644"
+
+- name: Deploy Mosquitto docker-compose
+  ansible.builtin.template:
+    src: docker-compose.mqtt.yml.j2
+    dest: /opt/homepulse/docker-compose.mqtt.yml
+    mode: "0644"
+
+- name: Start Mosquitto container
+  community.docker.docker_compose_v2:
+    project_src: /opt/homepulse
+    files:
+      - docker-compose.mqtt.yml
+    state: present

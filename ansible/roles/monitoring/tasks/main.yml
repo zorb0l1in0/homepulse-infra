@@ -1,0 +1,44 @@
+---
+- name: Create monitoring directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /opt/homepulse/telegraf
+    - /opt/homepulse/influxdb/data
+    - /opt/homepulse/grafana/data
+    - /opt/homepulse/grafana/provisioning/datasources
+    - /opt/homepulse/grafana/provisioning/dashboards
+
+- name: Set Grafana data ownership
+  ansible.builtin.file:
+    path: /opt/homepulse/grafana/data
+    owner: "472"
+    group: "472"
+    recurse: true
+
+- name: Deploy Telegraf config
+  ansible.builtin.template:
+    src: telegraf.conf.j2
+    dest: /opt/homepulse/telegraf/telegraf.conf
+    mode: "0644"
+
+- name: Deploy Grafana datasource provisioning
+  ansible.builtin.template:
+    src: grafana-datasource.yml.j2
+    dest: /opt/homepulse/grafana/provisioning/datasources/influxdb.yml
+    mode: "0644"
+
+- name: Deploy monitoring docker-compose
+  ansible.builtin.template:
+    src: docker-compose.monitoring.yml.j2
+    dest: /opt/homepulse/docker-compose.monitoring.yml
+    mode: "0644"
+
+- name: Start monitoring stack
+  community.docker.docker_compose_v2:
+    project_src: /opt/homepulse
+    files:
+      - docker-compose.monitoring.yml
+    state: present

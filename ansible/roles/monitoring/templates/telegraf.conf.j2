@@ -1,0 +1,15 @@
+[agent]
+  interval = "10s"
+  flush_interval = "10s"
+
+[[inputs.mqtt_consumer]]
+  servers = ["tcp://mosquitto:1883"]
+  topics = ["homepulse/#"]
+  data_format = "json"
+  topic_tag = "topic"
+
+[[outputs.influxdb_v2]]
+  urls = ["http://influxdb:8086"]
+  token = "{{ influxdb_token }}"
+  organization = "{{ influxdb_org }}"
+  bucket = "{{ influxdb_bucket }}"
