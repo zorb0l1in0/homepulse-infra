@@ -1,8 +1,3 @@
-# HomePulse — Remote Property Monitoring Platform
-# Phase 1: VPC
-# Phase 2: Networking (subnet, IGW, route table, security group)
-# Phase 3: EC2 instance with SSH key
-
 terraform {
   required_version = ">= 1.5.0"
 
@@ -47,7 +42,18 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "homepulse-${var.environment}-public"
+    Name = "homepulse-${var.environment}-public-a"
+  }
+}
+
+resource "aws_subnet" "public_b" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.public_subnet_b_cidr
+  availability_zone       = "${var.aws_region}b"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "homepulse-${var.environment}-public-b"
   }
 }
 
@@ -72,30 +78,27 @@ resource "aws_route_table" "public" {
   }
 }
 
-resource "aws_route_table_association" "public" {
+resource "aws_route_table_association" "public_a" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
 
-resource "aws_security_group" "homepulse" {
-  name        = "homepulse-${var.environment}-sg"
-  description = "HomePulse security group"
+resource "aws_route_table_association" "public_b" {
+  subnet_id      = aws_subnet.public_b.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "alb" {
+  name        = "homepulse-${var.environment}-alb-sg"
+  description = "HomePulse ALB security group"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
-  }
-
-  ingress {
-    description = "Grafana"
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
@@ -115,7 +118,41 @@ resource "aws_security_group" "homepulse" {
   }
 
   tags = {
-    Name = "homepulse-${var.environment}-sg"
+    Name = "homepulse-${var.environment}-alb-sg"
+  }
+}
+
+resource "aws_security_group" "homepulse" {
+  name        = "homepulse-${var.environment}-sg"
+  description = "HomePulse EC2 security group"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "SSH"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    cidr_blocks     = [var.my_ip]
+  }
+
+  ingress {
+    description     = "Grafana from ALB"
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "homepulse-${var.environment}-ec2-sg"
   }
 }
 
@@ -166,10 +203,87 @@ resource "aws_instance" "homepulse" {
   }
 }
 
-# --- Generate Ansible inventory ---
 resource "local_file" "ansible_inventory" {
   content = templatefile("${path.module}/ansible/inventory.tpl", {
     server_ip = aws_instance.homepulse.public_ip
   })
   filename = "${path.module}/ansible/inventories/hosts.ini"
+}
+
+resource "aws_acm_certificate" "homepulse" {
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "homepulse-${var.environment}-cert"
+  }
+}
+
+resource "aws_lb" "homepulse" {
+  name               = "homepulse-${var.environment}-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = [aws_subnet.public.id, aws_subnet.public_b.id]
+
+  tags = {
+    Name = "homepulse-${var.environment}-alb"
+  }
+}
+
+resource "aws_lb_target_group" "grafana" {
+  name     = "homepulse-${var.environment}-grafana"
+  port     = 3000
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    path                = "/api/health"
+    port                = "3000"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 30
+  }
+
+  tags = {
+    Name = "homepulse-${var.environment}-grafana-tg"
+  }
+}
+
+resource "aws_lb_target_group_attachment" "grafana" {
+  target_group_arn = aws_lb_target_group.grafana.arn
+  target_id        = aws_instance.homepulse.id
+  port             = 3000
+}
+
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.homepulse.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate.homepulse.arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.grafana.arn
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.homepulse.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
 }
