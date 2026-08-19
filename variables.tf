@@ -17,13 +17,19 @@ variable "vpc_cidr" {
 }
 
 variable "public_subnet_cidr" {
-  description = "CIDR block for the public subnet"
+  description = "CIDR block for public subnet A"
   type        = string
   default     = "10.0.1.0/24"
 }
 
+variable "public_subnet_b_cidr" {
+  description = "CIDR block for public subnet B"
+  type        = string
+  default     = "10.0.2.0/24"
+}
+
 variable "my_ip" {
-  description = "Your public IP in CIDR notation for SSH and Grafana access"
+  description = "Your public IP in CIDR notation for SSH access"
   type        = string
 }
 
@@ -31,4 +37,10 @@ variable "instance_type" {
   description = "EC2 instance type"
   type        = string
   default     = "t3.micro"
+}
+
+variable "domain_name" {
+  description = "Domain name for the ALB HTTPS certificate"
+  type        = string
+  default     = "homepulse.opsdev.info"
 }
