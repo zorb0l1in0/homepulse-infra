@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write  
+  pull-requests: write
 
 env:
   TF_VERSION: "1.15.8"
@@ -22,8 +22,6 @@ jobs:
   plan:
     name: Terraform Plan
     runs-on: ubuntu-24.04
-    outputs:
-      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,30 +38,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Get Runner IP
+        id: runner_ip
+        run: echo "ip=$(curl -s ifconfig.me)/32" >> "$GITHUB_OUTPUT"
+
       - name: Terraform Init
         run: terraform init -input=false
 
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Get Runner IP
-        id: runner_ip
-        run: echo "ip=$(curl -s ifconfig.me)/32" >> "$GITHUB_OUTPUT"
-
       - name: Terraform Plan
-        id: plan
         run: |
-          set -o pipefail
           terraform plan \
             -var-file="prod.tfvars" \
             -var="my_ip=${{ steps.runner_ip.outputs.ip }}" \
             -input=false \
-            -detailed-exitcode \
             -out=tfplan \
             2>&1 | tee plan_output.txt
-          PLAN_EXIT=$?
-          echo "exitcode=${PLAN_EXIT}" >> "$GITHUB_OUTPUT"
-        continue-on-error: true
 
       - name: Upload Plan Artifact
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -80,17 +72,12 @@ jobs:
           script: |
             const fs = require('fs');
             const planOutput = fs.readFileSync('plan_output.txt', 'utf8');
-            // Tronca se troppo lungo per il commento GitHub
             const maxLen = 60000;
             const truncated = planOutput.length > maxLen
               ? planOutput.substring(0, maxLen) + '\n... (troncato)'
               : planOutput;
 
-            const body = `### Terraform Plan 📋
-            \`\`\`
-            ${truncated}
-            \`\`\`
-            *Pusher: @${{ github.actor }}, Workflow: \`${{ github.workflow }}\`*`;
+            const body = `### Terraform Plan 📋\n\`\`\`\n${truncated}\n\`\`\``;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -99,21 +86,15 @@ jobs:
               body: body
             });
 
-      - name: Fail if plan errored
-        if: steps.plan.outputs.exitcode == '1'
-        run: exit 1
-
   # ──────────────────────────────────────────────
-  # 2. Approvazione manuale (solo su push/dispatch)
+  # 2. Approvazione manuale
   # ──────────────────────────────────────────────
   approve:
     name: Manual Approval
     needs: plan
-    if: >
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && needs.plan.outputs.plan_exitcode == '2'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    environment: production  # ← Richiede approvazione nell'environment GitHub
+    environment: production
     steps:
       - name: Approval granted
         run: echo "✅ Deploy approvato"
@@ -123,10 +104,7 @@ jobs:
   # ──────────────────────────────────────────────
   apply:
     name: Terraform Apply
-    needs: [plan, approve]
-    if: >
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && needs.plan.outputs.plan_exitcode == '2'
+    needs: approve
     runs-on: ubuntu-24.04
     outputs:
       ec2_ip: ${{ steps.outputs.outputs.ec2_ip }}
@@ -138,7 +116,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false  # Per catturare output puliti
+          terraform_wrapper: false
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -155,20 +133,15 @@ jobs:
       - name: Terraform Init
         run: terraform init -input=false
 
-      - name: Get Runner IP
-        id: runner_ip
-        run: echo "ip=$(curl -s ifconfig.me)/32" >> "$GITHUB_OUTPUT"
-
       - name: Terraform Apply
-        run: terraform apply -input=false -auto-approve tfplan -var="my_ip=${{ steps.runner_ip.outputs.ip }}" 
+        run: terraform apply -input=false -auto-approve tfplan
 
       - name: Capture Terraform Outputs
         id: outputs
-        run: |
-          echo "ec2_ip=$(terraform output -raw instance_public_ip)" >> "$GITHUB_OUTPUT"
+        run: echo "ec2_ip=$(terraform output -raw instance_public_ip)" >> "$GITHUB_OUTPUT"
 
   # ──────────────────────────────────────────────
-  # 4. Ansible Playbook
+  # 4. Ansible Configure
   # ──────────────────────────────────────────────
   configure:
     name: Ansible Configure
@@ -189,21 +162,27 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/homepulse-key.pem
           chmod 600 ~/.ssh/homepulse-key.pem
-          # Disabilita host key checking per CI
-          echo "Host *" >> ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+          printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n" > ~/.ssh/config
           chmod 600 ~/.ssh/config
 
       - name: Write Ansible Vault Password
         run: echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > /tmp/vault-pass.txt
+
+      - name: Generate Inventory
+        run: |
+          mkdir -p ansible/inventories
+          cat > ansible/inventories/hosts.ini << EOF
+          [homepulse]
+          ${{ needs.apply.outputs.ec2_ip }} ansible_user=ubuntu
+          EOF
+          cat ansible/inventories/hosts.ini
 
       - name: Wait for EC2 SSH Ready
         run: |
           EC2_IP="${{ needs.apply.outputs.ec2_ip }}"
           echo "Waiting for SSH on ${EC2_IP}..."
           for i in $(seq 1 30); do
-            if ssh -i ~/.ssh/homepulse-key.pem -o ConnectTimeout=5 ubuntu@${EC2_IP} 'echo ok' 2>/dev/null; then
+            if ssh -i ~/.ssh/homepulse-key.pem -o ConnectTimeout=5 -o StrictHostKeyChecking=no ubuntu@${EC2_IP} 'echo ok' 2>/dev/null; then
               echo "SSH ready!"
               exit 0
             fi
@@ -226,5 +205,4 @@ jobs:
 
       - name: Cleanup Secrets
         if: always()
-        run: |
-          rm -f ~/.ssh/homepulse-key.pem /tmp/vault-pass.txt
+        run: rm -f ~/.ssh/homepulse-key.pem /tmp/vault-pass.txt
