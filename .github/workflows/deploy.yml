@@ -53,6 +53,7 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
+          set -o pipefail
           terraform plan \
             -var-file="prod.tfvars" \
             -var="my_ip=${{ steps.runner_ip.outputs.ip }}" \
@@ -60,7 +61,8 @@ jobs:
             -detailed-exitcode \
             -out=tfplan \
             2>&1 | tee plan_output.txt
-          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          PLAN_EXIT=$?
+          echo "exitcode=${PLAN_EXIT}" >> "$GITHUB_OUTPUT"
         continue-on-error: true
 
       - name: Upload Plan Artifact
