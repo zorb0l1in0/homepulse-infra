@@ -5,11 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch: # Deploy manuale
+  workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write  # Per commentare il plan sulle PR
+  pull-requests: write  
 
 env:
   TF_VERSION: "1.15.8"
@@ -46,11 +46,16 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
+      - name: Get Runner IP
+        id: runner_ip
+        run: echo "ip=$(curl -s ifconfig.me)/32" >> "$GITHUB_OUTPUT"
+
       - name: Terraform Plan
         id: plan
         run: |
           terraform plan \
             -var-file="prod.tfvars" \
+            -var="my_ip=${{ steps.runner_ip.outputs.ip }}" \
             -input=false \
             -detailed-exitcode \
             -out=tfplan \
@@ -148,8 +153,12 @@ jobs:
       - name: Terraform Init
         run: terraform init -input=false
 
+      - name: Get Runner IP
+        id: runner_ip
+        run: echo "ip=$(curl -s ifconfig.me)/32" >> "$GITHUB_OUTPUT"
+
       - name: Terraform Apply
-        run: terraform apply -input=false -auto-approve tfplan
+        run: terraform apply -input=false -auto-approve tfplan -var="my_ip=${{ steps.runner_ip.outputs.ip }}" 
 
       - name: Capture Terraform Outputs
         id: outputs
